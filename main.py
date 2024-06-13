@@ -1,16 +1,17 @@
 import json
-
 from fastapi import FastAPI, WebSocket
 from entities.bdd import SessionLocal, User, Game
+from entities.connection import ConnectionManager
 
 app = FastAPI()
 db = SessionLocal()
+manager = ConnectionManager()
 
 
 @app.websocket("/connection")
 async def websocket_endpoint(websocket: WebSocket):
     new_game = None
-    await websocket.accept()
+    await manager.connect(websocket)
     while True:
         client_data = await websocket.receive_text()
         client_data = client_data.replace("'", '"')
@@ -26,7 +27,6 @@ async def websocket_endpoint(websocket: WebSocket):
             db.commit()
             games = db.query(Game).all()
             for game in games:
-                print(f"{game.id} : {len(game.users)}")
                 if len(game.users) < 5:
                     new_game = game
 
@@ -39,3 +39,4 @@ async def websocket_endpoint(websocket: WebSocket):
             new_game.users.append(user)
             db.commit()
             await websocket.send_json({"id": user.id, "gameId": new_game.id})
+            await manager.join_game(new_game.id, user.id, websocket)
